@@ -225,22 +225,43 @@ async function configureGitHubCopilot(): Promise<void> {
             }
         }
 
-        // Ensure servers object exists
-        if (!mcpConfig.servers) {
+        // Ensure servers object exists and is an object
+        if (!mcpConfig.servers || typeof mcpConfig.servers !== 'object') {
+            console.log('Creating new servers object');
             mcpConfig.servers = {};
         }
 
-        // Add or update the D365 BC Admin server configuration
-        const existingServers = { ...mcpConfig.servers };
+        console.log('Existing servers before merge:', JSON.stringify(mcpConfig.servers, null, 2));
+        console.log('Server config to add:', JSON.stringify(serverConfig, null, 2));
+
+        // Create a deep copy of existing servers to avoid reference issues
+        const existingServers = JSON.parse(JSON.stringify(mcpConfig.servers));
+
+        // Merge the configurations - preserve existing, add/update new
         mcpConfig.servers = {
             ...existingServers,
             ...serverConfig
         };
 
-        console.log('Updated MCP config:', JSON.stringify(mcpConfig, null, 2));
+        console.log('Final merged servers:', JSON.stringify(mcpConfig.servers, null, 2));
+        console.log('Full MCP config to write:', JSON.stringify(mcpConfig, null, 2));
 
         // Write the updated configuration to the file
         fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+
+        // Verify the file was written correctly
+        try {
+            const writtenContent = fs.readFileSync(mcpConfigPath, 'utf8');
+            const writtenConfig = JSON.parse(writtenContent);
+            console.log('Verification - written config:', JSON.stringify(writtenConfig, null, 2));
+
+            if (!writtenConfig.servers || Object.keys(writtenConfig.servers).length === 0) {
+                console.error('ERROR: Written config has no servers!');
+                vscode.window.showErrorMessage('Warning: MCP configuration may not have been written correctly. Check the console for details.');
+            }
+        } catch (verifyError) {
+            console.error('Error verifying written config:', verifyError);
+        }
 
         vscode.window.showInformationMessage('MCP configuration added to mcp.json file successfully!');
     } catch (error) {
