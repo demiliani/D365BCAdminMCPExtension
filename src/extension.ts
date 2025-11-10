@@ -396,97 +396,49 @@ async function checkMCPServerRunning(): Promise<boolean> {
 }
 
 async function checkStatus(): Promise<void> {
-    console.log('checkStatus function called');
+    console.log('checkStatus function called - checking MCP server running status');
 
     try {
         const outputChannel = vscode.window.createOutputChannel('D365 BC Admin MCP Status');
         outputChannel.show();
 
-        outputChannel.appendLine('Checking D365 BC Admin MCP Server status...');
-        outputChannel.appendLine('==========================================');
+        outputChannel.appendLine('Checking D365 BC Admin MCP Server Running Status');
+        outputChannel.appendLine('================================================');
         outputChannel.appendLine('');
-
-        console.log('Starting status checks...');
-
-        // Check prerequisites (use the same output channel)
-        console.log('Checking prerequisites...');
-        const prerequisitesMet = await checkPrerequisites(outputChannel);
-        console.log('Prerequisites met:', prerequisitesMet);
-        // Prerequisites check already wrote to the output channel, just add summary
-        outputChannel.appendLine(`Prerequisites met: ${prerequisitesMet ? '✓' : '✗'}`);
-        outputChannel.appendLine('');
-        console.log('Prerequisites summary written, moving to package check');
-
-        // Test output channel
-        console.log('Testing output channel...');
-        outputChannel.appendLine('TEST: Output channel is working');
-        console.log('Output channel test completed');
-
-        // Check if package is installed
-        console.log('About to check package installation...');
-        outputChannel.appendLine('Checking package installation...');
-        let installed = false;
-        try {
-            console.log('Calling isMCPServerInstalled...');
-            installed = await isMCPServerInstalled();
-            console.log('Package installed result:', installed);
-        } catch (error) {
-            console.error('Error checking package installation:', error);
-            outputChannel.appendLine('Error checking package installation');
-        }
-        console.log('Writing package installation result to output');
-        outputChannel.appendLine(`MCP Server package installed: ${installed ? '✓' : '✗'}`);
-        console.log('Package installation check completed');
 
         // Check MCP configuration in mcp.json
-        console.log('Checking MCP configuration...');
-        let mcpConfigStatus: { configured: boolean; command?: string } = { configured: false };
-        try {
-            mcpConfigStatus = await checkMCPConfiguration();
-            console.log('MCP configuration status:', mcpConfigStatus);
-        } catch (error) {
-            console.error('Error checking MCP configuration:', error);
-        }
-        outputChannel.appendLine(`MCP configuration in mcp.json: ${mcpConfigStatus.configured ? '✓' : '✗'}`);
-        if (mcpConfigStatus.configured) {
-            outputChannel.appendLine(`  - Server name: d365bc-admin`);
-            outputChannel.appendLine(`  - Command: ${mcpConfigStatus.command}`);
+        console.log('Checking MCP configuration in mcp.json...');
+        const mcpConfigStatus = await checkMCPConfiguration();
+
+        if (!mcpConfigStatus.configured) {
+            outputChannel.appendLine('❌ MCP server not configured in mcp.json');
+            outputChannel.appendLine('');
+            outputChannel.appendLine('Run "D365BCAdmin - Install D365 BC Admin MCP Server" first.');
+            vscode.window.showWarningMessage('MCP server not configured. Run the install command first.');
+            return;
         }
 
-        // Check if MCP server is accessible/running
-        console.log('Checking MCP server accessibility...');
-        let serverRunning = false;
-        try {
-            serverRunning = await checkMCPServerRunning();
-            console.log('Server running:', serverRunning);
-        } catch (error) {
-            console.error('Error checking server accessibility:', error);
-        }
-        outputChannel.appendLine(`MCP Server accessibility: ${serverRunning ? '✓ Running' : '✗ Not accessible'}`);
+        outputChannel.appendLine(`✅ MCP server configured: ${mcpConfigStatus.command}`);
+        outputChannel.appendLine('');
 
-        // Check settings scope
-        let settingsScope = 'global';
-        try {
-            settingsScope = vscode.workspace.getConfiguration('d365bc-admin-mcp').get('settingsScope', 'global');
-            console.log('Settings scope:', settingsScope);
-        } catch (error) {
-            console.error('Error getting settings scope:', error);
+        // Check if MCP server is running
+        outputChannel.appendLine('Checking if MCP server is running...');
+        console.log('Checking MCP server running status...');
+
+        const serverRunning = await checkMCPServerRunning();
+
+        outputChannel.appendLine('');
+        if (serverRunning) {
+            outputChannel.appendLine('🟢 STATUS: MCP Server is RUNNING');
+            vscode.window.showInformationMessage('MCP Server is running and accessible!');
+        } else {
+            outputChannel.appendLine('🔴 STATUS: MCP Server is NOT RUNNING');
+            vscode.window.showWarningMessage('MCP Server is not running or not accessible.');
         }
-        outputChannel.appendLine(`Extension settings scope: ${settingsScope}`);
 
         outputChannel.appendLine('');
         outputChannel.appendLine('Status check completed.');
 
-        // Show summary message
-        if (prerequisitesMet && installed && mcpConfigStatus.configured) {
-            if (serverRunning) {
-                vscode.window.showInformationMessage('D365 BC Admin MCP Server is properly installed, configured, and accessible!');
-            } else {
-                vscode.window.showInformationMessage('D365 BC Admin MCP Server is installed and configured, but may not be currently accessible.');
-            }
-        } else {
-            vscode.window.showWarningMessage('D365 BC Admin MCP Server is not fully installed or configured. Run the install command to fix this.');
-        }
     } catch (error) {
         console.error('Error in checkStatus:', error);
         vscode.window.showErrorMessage(`Status check failed: ${error}`);
