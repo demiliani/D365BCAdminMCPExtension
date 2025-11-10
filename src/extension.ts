@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 
 let statusBarItem: vscode.StatusBarItem;
 
@@ -186,34 +187,53 @@ async function uninstallMCPServer(): Promise<void> {
 }
 
 async function configureGitHubCopilot(): Promise<void> {
-    const settingsScope = vscode.workspace.getConfiguration('d365bc-admin-mcp').get('settingsScope', 'global');
+    // Get the path to the MCP configuration file
+    const mcpConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'mcp.json');
 
-    const mcpConfig = {
+    const serverConfig = {
         "d365bc-admin": {
             "command": "d365bc-admin-mcp"
         }
     };
 
     try {
-        // Configure MCP in VS Code settings
-        const configTarget = settingsScope === 'global'
-            ? vscode.ConfigurationTarget.Global
-            : vscode.ConfigurationTarget.Workspace;
+        // Read existing MCP configuration or create new one
+        let mcpConfig: any = { servers: {} };
 
-        const config = vscode.workspace.getConfiguration();
-        const currentMCP = config.get('mcp', {});
+        if (fs.existsSync(mcpConfigPath)) {
+            try {
+                const fileContent = fs.readFileSync(mcpConfigPath, 'utf8');
+                mcpConfig = JSON.parse(fileContent);
+                if (!mcpConfig.servers) {
+                    mcpConfig.servers = {};
+                }
+            } catch (error) {
+                // If file exists but is corrupted, start fresh
+                mcpConfig = { servers: {} };
+            }
+        }
 
-        const updatedMCP = { ...currentMCP, ...mcpConfig };
-        await config.update('mcp', updatedMCP, configTarget);
+        // Add or update the D365 BC Admin server configuration
+        mcpConfig.servers = {
+            ...mcpConfig.servers,
+            ...serverConfig
+        };
+
+        // Write the updated configuration to the file
+        fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+
+        vscode.window.showInformationMessage('MCP configuration added to mcp.json file successfully!');
     } catch (error) {
         // If automatic configuration fails, show manual instructions
-        const configInstructions = JSON.stringify(mcpConfig, null, 2);
+        const configInstructions = JSON.stringify({ servers: serverConfig }, null, 2);
 
-        const message = `Automatic MCP configuration failed. Please manually add this to your ${settingsScope} settings:
+        const message = `Automatic MCP configuration failed. Please manually create or update the file:
 
-${configInstructions}
+${mcpConfigPath}
 
-You can add this in VS Code Settings (JSON) or your settings.json file.`;
+Add this content to the file:
+
+${configInstructions}`;
 
         vscode.window.showWarningMessage('MCP Configuration Required', 'Copy Instructions').then(selection => {
             if (selection === 'Copy Instructions') {
@@ -225,13 +245,15 @@ You can add this in VS Code Settings (JSON) or your settings.json file.`;
         // Show the instructions in output channel as well
         const outputChannel = vscode.window.createOutputChannel('D365 BC Admin MCP Configuration');
         outputChannel.show();
-        outputChannel.appendLine('GitHub Copilot MCP Configuration Instructions:');
-        outputChannel.appendLine('===============================================');
+        outputChannel.appendLine('MCP Configuration Instructions:');
+        outputChannel.appendLine('===============================');
         outputChannel.appendLine('');
-        outputChannel.appendLine(`Please add this to your ${settingsScope} VS Code settings:`);
+        outputChannel.appendLine(`Please create or update the file: ${mcpConfigPath}`);
+        outputChannel.appendLine('');
+        outputChannel.appendLine('Add this content to the file:');
         outputChannel.appendLine(configInstructions);
         outputChannel.appendLine('');
-        outputChannel.appendLine('After adding this configuration, restart VS Code for the changes to take effect.');
+        outputChannel.appendLine('After updating the file, restart VS Code for the changes to take effect.');
 
         // Don't throw error - let the installation complete
         return;
@@ -239,24 +261,29 @@ You can add this in VS Code Settings (JSON) or your settings.json file.`;
 }
 
 async function removeGitHubCopilotConfig(): Promise<void> {
-    const settingsScope = vscode.workspace.getConfiguration('d365bc-admin-mcp').get('settingsScope', 'global');
-
-    const configTarget = settingsScope === 'global'
-        ? vscode.ConfigurationTarget.Global
-        : vscode.ConfigurationTarget.Workspace;
+    // Get the path to the MCP configuration file
+    const mcpConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'mcp.json');
 
     try {
-        const config = vscode.workspace.getConfiguration();
-        const currentMCP = config.get('mcp', {}) as MCPConfig;
+        if (fs.existsSync(mcpConfigPath)) {
+            const fileContent = fs.readFileSync(mcpConfigPath, 'utf8');
+            const mcpConfig = JSON.parse(fileContent);
 
-        if (currentMCP && currentMCP['d365bc-admin']) {
-            delete currentMCP['d365bc-admin'];
-            await config.update('mcp', currentMCP, configTarget);
+            // Remove the D365 BC Admin server configuration
+            if (mcpConfig.servers && mcpConfig.servers['d365bc-admin']) {
+                delete mcpConfig.servers['d365bc-admin'];
+
+                // Write the updated configuration back to the file
+                fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+
+                vscode.window.showInformationMessage('MCP configuration removed from mcp.json file successfully!');
+            }
         }
     } catch (error) {
         // If automatic removal fails, inform user to remove manually
+        const mcpConfigPathDisplay = path.join('~/Library/Application Support/Code/User/mcp.json');
         vscode.window.showInformationMessage(
-            'Please manually remove the "mcp"."d365bc-admin" configuration from your VS Code settings.'
+            `Please manually remove the "d365bc-admin" entry from the "servers" section in: ${mcpConfigPathDisplay}`
         );
     }
 }
