@@ -18,19 +18,19 @@
     "commands": [
       {
         "command": "d365bc-admin-mcp.install",
-        "title": "Install D365 BC Admin MCP Server"
+        "title": "D365BCAdmin - Install D365 BC Admin MCP Server"
       },
       {
         "command": "d365bc-admin-mcp.uninstall",
-        "title": "Uninstall D365 BC Admin MCP Server"
+        "title": "D365BCAdmin - Uninstall D365 BC Admin MCP Server"
       },
       {
         "command": "d365bc-admin-mcp.checkStatus",
-        "title": "Check MCP Server Status"
+        "title": "D365BCAdmin - Check MCP Server Status"
       },
       {
         "command": "d365bc-admin-mcp.showDiagnostics",
-        "title": "Show System Diagnostics"
+        "title": "D365BCAdmin - Show System Diagnostics"
       }
     ],
     "configuration": [
