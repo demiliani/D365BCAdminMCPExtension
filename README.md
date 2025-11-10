@@ -33,6 +33,7 @@ A Visual Studio Code extension that automatically installs and configures the Dy
 - Node.js (any recent version)
 - npm (comes with Node.js)
 - Internet connection for npm package installation
+- .NET 9 (for MCP server)
 
 ## Installation
 
@@ -115,31 +116,6 @@ The extension integrates with the `@demiliani/d365bc-admin-mcp` npm package, whi
 - Storage usage monitoring
 - Session management
 
-## Development
-
-### Prerequisites
-
-```bash
-npm install
-```
-
-### Building
-
-```bash
-npm run compile
-```
-
-### Testing
-
-```bash
-npm run test
-```
-
-### Debugging
-
-1. Open the project in VS Code
-2. Press F5 to launch the extension development host
-3. Test the extension in the new window
 
 ## Contributing
 
