@@ -315,11 +315,50 @@ async function isMCPServerInstalled(): Promise<boolean> {
     }
 }
 
+async function checkMCPConfiguration(): Promise<{ configured: boolean; command?: string }> {
+    try {
+        const mcpConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'mcp.json');
+
+        if (!fs.existsSync(mcpConfigPath)) {
+            return { configured: false };
+        }
+
+        const fileContent = fs.readFileSync(mcpConfigPath, 'utf8');
+        const mcpConfig = JSON.parse(fileContent);
+
+        if (mcpConfig.servers && mcpConfig.servers['d365bc-admin']) {
+            return {
+                configured: true,
+                command: mcpConfig.servers['d365bc-admin'].command
+            };
+        }
+
+        return { configured: false };
+    } catch (error) {
+        console.log('Error checking MCP configuration:', error);
+        return { configured: false };
+    }
+}
+
+async function checkMCPServerRunning(): Promise<boolean> {
+    try {
+        // Try to execute a simple command to test if the MCP server is accessible
+        // Since MCP servers typically start on-demand, we'll check if the command can be executed
+        await execCommand('timeout 5 d365bc-admin-mcp --help');
+        return true;
+    } catch (error) {
+        // If the command fails or times out, the server might not be accessible
+        console.log('MCP server accessibility check:', error);
+        return false;
+    }
+}
+
 async function checkStatus(): Promise<void> {
     const outputChannel = vscode.window.createOutputChannel('D365 BC Admin MCP Status');
     outputChannel.show();
 
     outputChannel.appendLine('Checking D365 BC Admin MCP Server status...');
+    outputChannel.appendLine('==========================================');
     outputChannel.appendLine('');
 
     // Check prerequisites
@@ -328,24 +367,34 @@ async function checkStatus(): Promise<void> {
 
     // Check if package is installed
     const installed = await isMCPServerInstalled();
-    outputChannel.appendLine(`MCP Server installed: ${installed ? '✓' : '✗'}`);
+    outputChannel.appendLine(`MCP Server package installed: ${installed ? '✓' : '✗'}`);
 
-    // Check GitHub Copilot configuration
-    const config = vscode.workspace.getConfiguration('github.copilot');
-    const mcpConfig = config.get('mcp', {}) as MCPConfig;
-    const configured = mcpConfig && mcpConfig['d365bc-admin'];
-    outputChannel.appendLine(`GitHub Copilot configured: ${configured ? '✓' : '✗'}`);
+    // Check MCP configuration in mcp.json
+    const mcpConfigStatus = await checkMCPConfiguration();
+    outputChannel.appendLine(`MCP configuration in mcp.json: ${mcpConfigStatus.configured ? '✓' : '✗'}`);
+    if (mcpConfigStatus.configured) {
+        outputChannel.appendLine(`  - Server name: d365bc-admin`);
+        outputChannel.appendLine(`  - Command: ${mcpConfigStatus.command}`);
+    }
+
+    // Check if MCP server is accessible/running
+    const serverRunning = await checkMCPServerRunning();
+    outputChannel.appendLine(`MCP Server accessibility: ${serverRunning ? '✓ Running' : '✗ Not accessible'}`);
 
     // Check settings scope
     const settingsScope = vscode.workspace.getConfiguration('d365bc-admin-mcp').get('settingsScope', 'global');
-    outputChannel.appendLine(`Settings scope: ${settingsScope}`);
+    outputChannel.appendLine(`Extension settings scope: ${settingsScope}`);
 
     outputChannel.appendLine('');
     outputChannel.appendLine('Status check completed.');
 
     // Show summary message
-    if (prerequisitesMet && installed && configured) {
-        vscode.window.showInformationMessage('D365 BC Admin MCP Server is properly installed and configured!');
+    if (prerequisitesMet && installed && mcpConfigStatus.configured) {
+        if (serverRunning) {
+            vscode.window.showInformationMessage('D365 BC Admin MCP Server is properly installed, configured, and accessible!');
+        } else {
+            vscode.window.showInformationMessage('D365 BC Admin MCP Server is installed and configured, but may not be currently accessible.');
+        }
     } else {
         vscode.window.showWarningMessage('D365 BC Admin MCP Server is not fully installed or configured. Run the install command to fix this.');
     }
@@ -408,16 +457,20 @@ function updateStatusBar(): Promise<void> {
     return new Promise(async (resolve) => {
         try {
             const installed = await isMCPServerInstalled();
-            const config = vscode.workspace.getConfiguration('github.copilot');
-            const mcpConfig = config.get('mcp', {}) as MCPConfig;
-            const configured = mcpConfig && mcpConfig['d365bc-admin'];
+            const mcpConfigStatus = await checkMCPConfiguration();
+            const configured = mcpConfigStatus.configured;
+            const serverRunning = configured && await checkMCPServerRunning();
 
-            if (installed && configured) {
+            if (installed && configured && serverRunning) {
                 statusBarItem.text = '$(check) D365 BC MCP';
-                statusBarItem.tooltip = 'D365 BC Admin MCP Server is active';
+                statusBarItem.tooltip = 'D365 BC Admin MCP Server is active and accessible';
                 statusBarItem.color = undefined;
-            } else if (installed) {
+            } else if (installed && configured) {
                 statusBarItem.text = '$(warning) D365 BC MCP';
+                statusBarItem.tooltip = 'D365 BC Admin MCP Server configured but not accessible';
+                statusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
+            } else if (installed) {
+                statusBarItem.text = '$(tools) D365 BC MCP';
                 statusBarItem.tooltip = 'D365 BC Admin MCP Server installed but not configured';
                 statusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
             } else {
