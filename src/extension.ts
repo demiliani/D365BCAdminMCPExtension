@@ -440,7 +440,11 @@ async function checkStatus(): Promise<void> {
         outputChannel.appendLine('Checking if MCP server is running...');
         console.log('Checking MCP server running status...');
 
+        console.log('About to call checkMCPServerRunning...');
+        outputChannel.appendLine('DEBUG: About to check server running status...');
         const serverRunning = await checkMCPServerRunning();
+        console.log('checkMCPServerRunning returned:', serverRunning);
+        outputChannel.appendLine(`DEBUG: Server running result: ${serverRunning}`);
 
         outputChannel.appendLine('');
         if (serverRunning) {
