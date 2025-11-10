@@ -188,26 +188,60 @@ async function uninstallMCPServer(): Promise<void> {
 async function configureGitHubCopilot(): Promise<void> {
     const settingsScope = vscode.workspace.getConfiguration('d365bc-admin-mcp').get('settingsScope', 'global');
 
-    const mcpConfig: MCPConfig = {
+    const mcpConfig = {
         "d365bc-admin": {
             "command": "d365bc-admin-mcp"
         }
     };
 
-    if (settingsScope === 'global') {
-        // Configure globally
-        const config = vscode.workspace.getConfiguration('github.copilot');
-        const currentMCP = config.get('mcp', {}) as MCPConfig;
+    try {
+        if (settingsScope === 'global') {
+            // Configure globally
+            const config = vscode.workspace.getConfiguration('github.copilot');
+            const currentMCP = config.get('mcp', {});
 
-        const updatedMCP = { ...currentMCP, ...mcpConfig };
-        await config.update('mcp', updatedMCP, vscode.ConfigurationTarget.Global);
-    } else {
-        // Configure for workspace
-        const config = vscode.workspace.getConfiguration('github.copilot');
-        const currentMCP = config.get('mcp', {}) as MCPConfig;
+            const updatedMCP = { ...currentMCP, ...mcpConfig };
+            await config.update('mcp', updatedMCP, vscode.ConfigurationTarget.Global);
+        } else {
+            // Configure for workspace
+            const config = vscode.workspace.getConfiguration('github.copilot');
+            const currentMCP = config.get('mcp', {});
 
-        const updatedMCP = { ...currentMCP, ...mcpConfig };
-        await config.update('mcp', updatedMCP, vscode.ConfigurationTarget.Workspace);
+            const updatedMCP = { ...currentMCP, ...mcpConfig };
+            await config.update('mcp', updatedMCP, vscode.ConfigurationTarget.Workspace);
+        }
+    } catch (error) {
+        // If automatic configuration fails, show manual instructions
+        const configInstructions = JSON.stringify({
+            "github.copilot.mcp": mcpConfig
+        }, null, 2);
+
+        const message = `Automatic GitHub Copilot MCP configuration failed. Please manually add this to your ${settingsScope} settings:
+
+${configInstructions}
+
+You can add this in VS Code Settings (JSON) or your settings.json file.`;
+
+        vscode.window.showWarningMessage('MCP Configuration Required', 'Copy Instructions').then(selection => {
+            if (selection === 'Copy Instructions') {
+                vscode.env.clipboard.writeText(configInstructions);
+                vscode.window.showInformationMessage('Configuration copied to clipboard!');
+            }
+        });
+
+        // Show the instructions in output channel as well
+        const outputChannel = vscode.window.createOutputChannel('D365 BC Admin MCP Configuration');
+        outputChannel.show();
+        outputChannel.appendLine('GitHub Copilot MCP Configuration Instructions:');
+        outputChannel.appendLine('===============================================');
+        outputChannel.appendLine('');
+        outputChannel.appendLine(`Please add this to your ${settingsScope} VS Code settings:`);
+        outputChannel.appendLine(configInstructions);
+        outputChannel.appendLine('');
+        outputChannel.appendLine('After adding this configuration, restart VS Code for the changes to take effect.');
+
+        // Don't throw error - let the installation complete
+        return;
     }
 }
 
@@ -218,12 +252,19 @@ async function removeGitHubCopilotConfig(): Promise<void> {
         ? vscode.ConfigurationTarget.Global
         : vscode.ConfigurationTarget.Workspace;
 
-    const config = vscode.workspace.getConfiguration('github.copilot');
-    const currentMCP = config.get('mcp', {}) as MCPConfig;
+    try {
+        const config = vscode.workspace.getConfiguration('github.copilot');
+        const currentMCP = config.get('mcp', {}) as MCPConfig;
 
-    if (currentMCP && currentMCP['d365bc-admin']) {
-        delete currentMCP['d365bc-admin'];
-        await config.update('mcp', currentMCP, configTarget);
+        if (currentMCP && currentMCP['d365bc-admin']) {
+            delete currentMCP['d365bc-admin'];
+            await config.update('mcp', currentMCP, configTarget);
+        }
+    } catch (error) {
+        // If automatic removal fails, inform user to remove manually
+        vscode.window.showInformationMessage(
+            'Please manually remove the "github.copilot.mcp"."d365bc-admin" configuration from your VS Code settings.'
+        );
     }
 }
 

@@ -33,29 +33,41 @@
         "title": "Show System Diagnostics"
       }
     ],
-    "configuration": {
-      "title": "D365 BC Admin MCP",
-      "properties": {
-        "d365bc-admin-mcp.settingsScope": {
-          "type": "string",
-          "default": "global",
-          "enum": [
-            "global",
-            "workspace"
-          ],
-          "enumDescriptions": [
-            "Apply settings globally for all VS Code instances",
-            "Apply settings only to the current workspace"
-          ],
-          "description": "Choose where to apply the MCP server configuration"
-        },
-        "d365bc-admin-mcp.autoInstall": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically install the MCP server when the extension is activated"
+    "configuration": [
+      {
+        "title": "D365 BC Admin MCP",
+        "properties": {
+          "d365bc-admin-mcp.settingsScope": {
+            "type": "string",
+            "default": "global",
+            "enum": [
+              "global",
+              "workspace"
+            ],
+            "enumDescriptions": [
+              "Apply settings globally for all VS Code instances",
+              "Apply settings only to the current workspace"
+            ],
+            "description": "Choose where to apply the MCP server configuration"
+          },
+          "d365bc-admin-mcp.autoInstall": {
+            "type": "boolean",
+            "default": "true",
+            "description": "Automatically install the MCP server when the extension is activated"
+          }
+        }
+      },
+      {
+        "title": "GitHub Copilot",
+        "properties": {
+          "github.copilot.mcp": {
+            "type": "object",
+            "default": {},
+            "description": "Model Context Protocol (MCP) server configurations for GitHub Copilot"
+          }
         }
       }
-    }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
