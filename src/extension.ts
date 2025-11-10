@@ -204,20 +204,30 @@ async function configureGitHubCopilot(): Promise<void> {
             try {
                 const fileContent = fs.readFileSync(mcpConfigPath, 'utf8');
                 mcpConfig = JSON.parse(fileContent);
-                if (!mcpConfig.servers) {
-                    mcpConfig.servers = {};
-                }
+                console.log('Existing MCP config:', JSON.stringify(mcpConfig, null, 2));
             } catch (error) {
-                // If file exists but is corrupted, start fresh
+                console.log('Error parsing existing MCP config:', error);
+                // If file exists but is corrupted, create backup and start fresh
+                const backupPath = `${mcpConfigPath}.backup.${Date.now()}`;
+                fs.copyFileSync(mcpConfigPath, backupPath);
+                console.log(`Backed up corrupted file to: ${backupPath}`);
                 mcpConfig = { servers: {} };
             }
         }
 
+        // Ensure servers object exists
+        if (!mcpConfig.servers) {
+            mcpConfig.servers = {};
+        }
+
         // Add or update the D365 BC Admin server configuration
+        const existingServers = { ...mcpConfig.servers };
         mcpConfig.servers = {
-            ...mcpConfig.servers,
+            ...existingServers,
             ...serverConfig
         };
+
+        console.log('Updated MCP config:', JSON.stringify(mcpConfig, null, 2));
 
         // Write the updated configuration to the file
         fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
@@ -269,15 +279,23 @@ async function removeGitHubCopilotConfig(): Promise<void> {
             const fileContent = fs.readFileSync(mcpConfigPath, 'utf8');
             const mcpConfig = JSON.parse(fileContent);
 
+            console.log('Existing MCP config before removal:', JSON.stringify(mcpConfig, null, 2));
+
             // Remove the D365 BC Admin server configuration
             if (mcpConfig.servers && mcpConfig.servers['d365bc-admin']) {
                 delete mcpConfig.servers['d365bc-admin'];
+
+                console.log('Updated MCP config after removal:', JSON.stringify(mcpConfig, null, 2));
 
                 // Write the updated configuration back to the file
                 fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
 
                 vscode.window.showInformationMessage('MCP configuration removed from mcp.json file successfully!');
+            } else {
+                console.log('D365 BC Admin server not found in MCP configuration');
             }
+        } else {
+            console.log('MCP config file does not exist');
         }
     } catch (error) {
         // If automatic removal fails, inform user to remove manually
