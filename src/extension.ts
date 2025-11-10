@@ -372,25 +372,40 @@ async function checkMCPConfiguration(): Promise<{ configured: boolean; command?:
 }
 
 async function checkMCPServerRunning(): Promise<boolean> {
+    console.log('Starting MCP server running check...');
+
     try {
         // First check if the MCP package is installed and executable
+        console.log('Checking if MCP package is installed...');
         const packageInstalled = await isMCPServerInstalled();
+        console.log('Package installed check result:', packageInstalled);
+
         if (!packageInstalled) {
             console.log('MCP server accessibility check: package not installed');
             return false;
         }
 
-        // Try to execute the MCP server command to see if it's accessible
-        // MCP servers typically start on-demand, so we'll test basic command execution
-        console.log('Testing MCP server command execution...');
-        const result = await execCommand('d365bc-admin-mcp --help');
-        console.log('MCP server command executed successfully:', result ? 'yes' : 'no');
+        // For MCP servers, we check if the command exists and is executable
+        // MCP servers typically start on-demand when called by MCP clients
+        console.log('Testing MCP server command availability...');
 
-        // If we can execute the command, consider the server accessible
-        return true;
+        // Use a simple command that should respond quickly
+        const checkCommand = process.platform === 'win32'
+            ? 'where d365bc-admin-mcp >nul 2>nul && echo found || echo notfound'
+            : 'which d365bc-admin-mcp >/dev/null 2>&1 && echo found || echo notfound';
+
+        console.log('Running command check:', checkCommand);
+        const commandCheck = await execCommand(checkCommand);
+        console.log('Command check result:', commandCheck?.trim());
+
+        const isAvailable = commandCheck?.trim() === 'found';
+        console.log('MCP server command available:', isAvailable);
+
+        // If the command is available, consider the server "available" (can be started on demand)
+        return isAvailable;
+
     } catch (error) {
-        // If the command fails, the server is not accessible
-        console.log('MCP server accessibility check failed:', error);
+        console.error('MCP server accessibility check failed:', error);
         return false;
     }
 }
