@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "watch",
+      "group": "build",
+      "presentation": {
+        "panel": "shared",
+        "reveal": "never"
+      },
+      "problemMatcher": [
+        "$tsc-watch"
+      ],
+      "isBackground": true,
+      "label": "npm: watch",
+      "detail": "tsc -watch -p ./"
+    },
+    {
+      "type": "npm",
+      "script": "compile",
+      "group": "build",
+      "presentation": {
+        "panel": "shared"
+      },
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "label": "npm: compile",
+      "detail": "tsc -p ./"
+    }
+  ]
+}
