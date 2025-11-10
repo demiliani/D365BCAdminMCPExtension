@@ -11,10 +11,10 @@ A Visual Studio Code extension that automatically installs and configures the Dy
 - **Status Monitoring**: Real-time status indication in the status bar
 
 ### Commands
-- `Install D365 BC Admin MCP Server` - Install and configure the MCP server
-- `Uninstall D365 BC Admin MCP Server` - Remove the MCP server and clean up configuration
-- `Check MCP Server Status` - Verify installation and configuration status
-- `Show System Diagnostics` - Display detailed system and extension information
+- `D365BCAdmin - Install D365 BC Admin MCP Server` - Install and configure the MCP server
+- `D365BCAdmin - Uninstall D365 BC Admin MCP Server` - Remove the MCP server and clean up configuration
+- `D365BCAdmin - Check MCP Server Status` - Verify installation and configuration status
+- `D365BCAdmin - Show System Diagnostics` - Display detailed system and extension information
 
 ### Configuration Options
 - **Settings Scope**: Choose between global or workspace-specific configuration
@@ -39,7 +39,7 @@ A Visual Studio Code extension that automatically installs and configures the Dy
 1. Install this extension from the VS Code Marketplace
 2. The extension will automatically activate and check for prerequisites
 3. If auto-install is enabled, it will prompt to install the MCP server
-4. Alternatively, use the command palette to run "Install D365 BC Admin MCP Server"
+4. Alternatively, use the command palette to run "D365BCAdmin - Install D365 BC Admin MCP Server"
 
 ## Configuration
 
@@ -54,13 +54,13 @@ Access these settings through VS Code's settings UI or by editing `settings.json
 }
 ```
 
-### GitHub Copilot MCP Configuration
+### MCP Configuration
 
-The extension automatically adds this configuration to your GitHub Copilot settings:
+The extension automatically adds this configuration to your MCP settings file (`~/Library/Application Support/Code/User/mcp.json`):
 
 ```json
 {
-  "github.copilot.mcp": {
+  "servers": {
     "d365bc-admin": {
       "command": "d365bc-admin-mcp"
     }
@@ -74,7 +74,7 @@ The extension automatically adds this configuration to your GitHub Copilot setti
 
 1. After installation, restart VS Code to ensure MCP configuration takes effect
 2. Check the status bar for the MCP server status indicator
-3. Use "Check MCP Server Status" command to verify everything is working
+3. Use "D365BCAdmin - Check MCP Server Status" command to verify everything is working
 
 ### Daily Usage
 
@@ -84,9 +84,9 @@ The extension automatically adds this configuration to your GitHub Copilot setti
 
 ### Troubleshooting
 
-1. **Prerequisites Issues**: Run "Show System Diagnostics" to check Node.js and npm
+1. **Prerequisites Issues**: Run "D365BCAdmin - Show System Diagnostics" to check Node.js and npm
 2. **Installation Failures**: Check the "D365 BC Admin MCP Installation" output channel
-3. **Configuration Issues**: Use "Check MCP Server Status" to verify settings
+3. **Configuration Issues**: Use "D365BCAdmin - Check MCP Server Status" to verify settings
 4. **Permission Issues**: Ensure npm has sufficient permissions for global installations
 
 ## Architecture
