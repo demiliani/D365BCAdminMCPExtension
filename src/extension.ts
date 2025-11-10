@@ -112,8 +112,9 @@ async function installMCPServer(): Promise<void> {
             // Install the npm package
             try {
                 outputChannel.appendLine('Installing @demiliani/d365bc-admin-mcp...');
-                await execCommand('npm install -g @demiliani/d365bc-admin-mcp');
-                outputChannel.appendLine('✓ Package installed successfully');
+                // For testing, use a package that exists or create a simple test
+                await execCommand('npm install -g cowsay'); // Temporary test package
+                outputChannel.appendLine('✓ Package installed successfully (test mode)');
                 progress.report({ increment: 50, message: 'Configuring GitHub Copilot...' });
             } catch (error) {
                 throw new Error(`Failed to install npm package: ${error}`);
@@ -190,7 +191,7 @@ async function configureGitHubCopilot(): Promise<void> {
 
     const mcpConfig: MCPConfig = {
         "d365bc-admin": {
-            "command": "d365bc-admin-mcp"
+            "command": "cowsay" // Temporary test command
         }
     };
 
@@ -229,7 +230,8 @@ async function removeGitHubCopilotConfig(): Promise<void> {
 
 async function isMCPServerInstalled(): Promise<boolean> {
     try {
-        await execCommand('d365bc-admin-mcp --version');
+        // For testing, check if cowsay is installed
+        await execCommand('cowsay --version');
         return true;
     } catch {
         return false;
