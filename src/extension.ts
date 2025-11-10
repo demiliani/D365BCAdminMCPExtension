@@ -415,17 +415,28 @@ async function checkStatus(): Promise<void> {
         // Prerequisites check already wrote to the output channel, just add summary
         outputChannel.appendLine(`Prerequisites met: ${prerequisitesMet ? '✓' : '✗'}`);
         outputChannel.appendLine('');
+        console.log('Prerequisites summary written, moving to package check');
+
+        // Test output channel
+        console.log('Testing output channel...');
+        outputChannel.appendLine('TEST: Output channel is working');
+        console.log('Output channel test completed');
 
         // Check if package is installed
-        console.log('Checking package installation...');
+        console.log('About to check package installation...');
+        outputChannel.appendLine('Checking package installation...');
         let installed = false;
         try {
+            console.log('Calling isMCPServerInstalled...');
             installed = await isMCPServerInstalled();
-            console.log('Package installed:', installed);
+            console.log('Package installed result:', installed);
         } catch (error) {
             console.error('Error checking package installation:', error);
+            outputChannel.appendLine('Error checking package installation');
         }
+        console.log('Writing package installation result to output');
         outputChannel.appendLine(`MCP Server package installed: ${installed ? '✓' : '✗'}`);
+        console.log('Package installation check completed');
 
         // Check MCP configuration in mcp.json
         console.log('Checking MCP configuration...');
