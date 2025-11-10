@@ -58,12 +58,22 @@ export function deactivate() {
     }
 }
 
-async function checkPrerequisites(): Promise<boolean> {
-    const outputChannel = vscode.window.createOutputChannel('D365 BC Admin MCP');
-    outputChannel.show();
+async function checkPrerequisites(outputChannel?: vscode.OutputChannel): Promise<boolean> {
+    // Use provided output channel or create a new one
+    let channel = outputChannel;
+    let shouldShowChannel = false;
+
+    if (!channel) {
+        channel = vscode.window.createOutputChannel('D365 BC Admin MCP');
+        shouldShowChannel = true;
+    }
+
+    if (shouldShowChannel) {
+        channel.show();
+    }
 
     try {
-        outputChannel.appendLine('Checking prerequisites...');
+        channel.appendLine('Checking prerequisites...');
 
         // Check Node.js
         const nodeVersion = await execCommand('node --version');
@@ -71,7 +81,7 @@ async function checkPrerequisites(): Promise<boolean> {
             vscode.window.showErrorMessage('Node.js is not installed. Please install Node.js first.');
             return false;
         }
-        outputChannel.appendLine(`✓ Node.js version: ${nodeVersion.trim()}`);
+        channel.appendLine(`✓ Node.js version: ${nodeVersion.trim()}`);
 
         // Check npm
         const npmVersion = await execCommand('npm --version');
@@ -79,12 +89,12 @@ async function checkPrerequisites(): Promise<boolean> {
             vscode.window.showErrorMessage('npm is not installed. Please install npm first.');
             return false;
         }
-        outputChannel.appendLine(`✓ npm version: ${npmVersion.trim()}`);
+        channel.appendLine(`✓ npm version: ${npmVersion.trim()}`);
 
-        outputChannel.appendLine('Prerequisites check completed successfully.');
+        channel.appendLine('Prerequisites check completed successfully.');
         return true;
     } catch (error) {
-        outputChannel.appendLine(`Prerequisites check failed: ${error}`);
+        channel.appendLine(`Prerequisites check failed: ${error}`);
         return false;
     }
 }
@@ -97,7 +107,7 @@ async function installMCPServer(): Promise<void> {
         outputChannel.appendLine('Starting D365 BC Admin MCP Server installation...');
 
         // Check prerequisites
-        const prerequisitesMet = await checkPrerequisites();
+        const prerequisitesMet = await checkPrerequisites(outputChannel);
         if (!prerequisitesMet) {
             return;
         }
@@ -375,11 +385,13 @@ async function checkStatus(): Promise<void> {
 
     console.log('Starting status checks...');
 
-    // Check prerequisites
+    // Check prerequisites (use the same output channel)
     console.log('Checking prerequisites...');
-    const prerequisitesMet = await checkPrerequisites();
+    const prerequisitesMet = await checkPrerequisites(outputChannel);
     console.log('Prerequisites met:', prerequisitesMet);
+    // Prerequisites check already wrote to the output channel, just add summary
     outputChannel.appendLine(`Prerequisites met: ${prerequisitesMet ? '✓' : '✗'}`);
+    outputChannel.appendLine('');
 
     // Check if package is installed
     console.log('Checking package installation...');
