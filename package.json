@@ -58,12 +58,12 @@
         }
       },
       {
-        "title": "GitHub Copilot",
+        "title": "Model Context Protocol",
         "properties": {
-          "github.copilot.mcp": {
+          "mcp": {
             "type": "object",
             "default": {},
-            "description": "Model Context Protocol (MCP) server configurations for GitHub Copilot"
+            "description": "Model Context Protocol (MCP) server configurations"
           }
         }
       }

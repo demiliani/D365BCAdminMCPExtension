@@ -195,28 +195,21 @@ async function configureGitHubCopilot(): Promise<void> {
     };
 
     try {
-        if (settingsScope === 'global') {
-            // Configure globally
-            const config = vscode.workspace.getConfiguration('github.copilot');
-            const currentMCP = config.get('mcp', {});
+        // Configure MCP in VS Code settings
+        const configTarget = settingsScope === 'global'
+            ? vscode.ConfigurationTarget.Global
+            : vscode.ConfigurationTarget.Workspace;
 
-            const updatedMCP = { ...currentMCP, ...mcpConfig };
-            await config.update('mcp', updatedMCP, vscode.ConfigurationTarget.Global);
-        } else {
-            // Configure for workspace
-            const config = vscode.workspace.getConfiguration('github.copilot');
-            const currentMCP = config.get('mcp', {});
+        const config = vscode.workspace.getConfiguration();
+        const currentMCP = config.get('mcp', {});
 
-            const updatedMCP = { ...currentMCP, ...mcpConfig };
-            await config.update('mcp', updatedMCP, vscode.ConfigurationTarget.Workspace);
-        }
+        const updatedMCP = { ...currentMCP, ...mcpConfig };
+        await config.update('mcp', updatedMCP, configTarget);
     } catch (error) {
         // If automatic configuration fails, show manual instructions
-        const configInstructions = JSON.stringify({
-            "github.copilot.mcp": mcpConfig
-        }, null, 2);
+        const configInstructions = JSON.stringify(mcpConfig, null, 2);
 
-        const message = `Automatic GitHub Copilot MCP configuration failed. Please manually add this to your ${settingsScope} settings:
+        const message = `Automatic MCP configuration failed. Please manually add this to your ${settingsScope} settings:
 
 ${configInstructions}
 
@@ -253,7 +246,7 @@ async function removeGitHubCopilotConfig(): Promise<void> {
         : vscode.ConfigurationTarget.Workspace;
 
     try {
-        const config = vscode.workspace.getConfiguration('github.copilot');
+        const config = vscode.workspace.getConfiguration();
         const currentMCP = config.get('mcp', {}) as MCPConfig;
 
         if (currentMCP && currentMCP['d365bc-admin']) {
@@ -263,7 +256,7 @@ async function removeGitHubCopilotConfig(): Promise<void> {
     } catch (error) {
         // If automatic removal fails, inform user to remove manually
         vscode.window.showInformationMessage(
-            'Please manually remove the "github.copilot.mcp"."d365bc-admin" configuration from your VS Code settings.'
+            'Please manually remove the "mcp"."d365bc-admin" configuration from your VS Code settings.'
         );
     }
 }
