@@ -342,18 +342,30 @@ async function checkMCPConfiguration(): Promise<{ configured: boolean; command?:
 
 async function checkMCPServerRunning(): Promise<boolean> {
     try {
-        // Try to execute a simple command to test if the MCP server is accessible
-        // Since MCP servers typically start on-demand, we'll check if the command can be executed
-        await execCommand('timeout 5 d365bc-admin-mcp --help');
+        // First check if the MCP package is installed and executable
+        const packageInstalled = await isMCPServerInstalled();
+        if (!packageInstalled) {
+            console.log('MCP server accessibility check: package not installed');
+            return false;
+        }
+
+        // Try to execute the MCP server command to see if it's accessible
+        // MCP servers typically start on-demand, so we'll test basic command execution
+        console.log('Testing MCP server command execution...');
+        const result = await execCommand('d365bc-admin-mcp --help');
+        console.log('MCP server command executed successfully:', result ? 'yes' : 'no');
+
+        // If we can execute the command, consider the server accessible
         return true;
     } catch (error) {
-        // If the command fails or times out, the server might not be accessible
-        console.log('MCP server accessibility check:', error);
+        // If the command fails, the server is not accessible
+        console.log('MCP server accessibility check failed:', error);
         return false;
     }
 }
 
 async function checkStatus(): Promise<void> {
+    console.log('checkStatus function called');
     const outputChannel = vscode.window.createOutputChannel('D365 BC Admin MCP Status');
     outputChannel.show();
 
@@ -361,16 +373,24 @@ async function checkStatus(): Promise<void> {
     outputChannel.appendLine('==========================================');
     outputChannel.appendLine('');
 
+    console.log('Starting status checks...');
+
     // Check prerequisites
+    console.log('Checking prerequisites...');
     const prerequisitesMet = await checkPrerequisites();
+    console.log('Prerequisites met:', prerequisitesMet);
     outputChannel.appendLine(`Prerequisites met: ${prerequisitesMet ? '✓' : '✗'}`);
 
     // Check if package is installed
+    console.log('Checking package installation...');
     const installed = await isMCPServerInstalled();
+    console.log('Package installed:', installed);
     outputChannel.appendLine(`MCP Server package installed: ${installed ? '✓' : '✗'}`);
 
     // Check MCP configuration in mcp.json
+    console.log('Checking MCP configuration...');
     const mcpConfigStatus = await checkMCPConfiguration();
+    console.log('MCP configuration status:', mcpConfigStatus);
     outputChannel.appendLine(`MCP configuration in mcp.json: ${mcpConfigStatus.configured ? '✓' : '✗'}`);
     if (mcpConfigStatus.configured) {
         outputChannel.appendLine(`  - Server name: d365bc-admin`);
@@ -378,11 +398,14 @@ async function checkStatus(): Promise<void> {
     }
 
     // Check if MCP server is accessible/running
+    console.log('Checking MCP server accessibility...');
     const serverRunning = await checkMCPServerRunning();
+    console.log('Server running:', serverRunning);
     outputChannel.appendLine(`MCP Server accessibility: ${serverRunning ? '✓ Running' : '✗ Not accessible'}`);
 
     // Check settings scope
     const settingsScope = vscode.workspace.getConfiguration('d365bc-admin-mcp').get('settingsScope', 'global');
+    console.log('Settings scope:', settingsScope);
     outputChannel.appendLine(`Extension settings scope: ${settingsScope}`);
 
     outputChannel.appendLine('');
