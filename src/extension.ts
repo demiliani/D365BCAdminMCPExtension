@@ -59,6 +59,42 @@ export function deactivate() {
     }
 }
 
+function getVSCodeDirName(): string {
+    const appName = vscode.env.appName || 'Visual Studio Code';
+    if (appName.includes('Insiders')) return 'Code - Insiders';
+    if (appName.includes('OSS')) return 'Code - OSS';
+    if (appName.includes('VSCodium')) return 'VSCodium';
+    return 'Code';
+}
+
+function getMcpConfigPath(): string {
+    const codeDir = getVSCodeDirName();
+    if (process.platform === 'win32') {
+        const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+        return path.join(appData, codeDir, 'User', 'mcp.json');
+    } else if (process.platform === 'darwin') {
+        return path.join(os.homedir(), 'Library', 'Application Support', codeDir, 'User', 'mcp.json');
+    } else {
+        const configHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+        return path.join(configHome, codeDir, 'User', 'mcp.json');
+    }
+}
+
+function ensureParentDirExists(filePath: string) {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+}
+
+function humanizePath(p: string): string {
+    const home = os.homedir();
+    if (p.startsWith(home)) {
+        return path.join('~', p.slice(home.length + (p[home.length] === path.sep ? 1 : 0)));
+    }
+    return p;
+}
+
 async function checkPrerequisites(outputChannel?: vscode.OutputChannel): Promise<boolean> {
     // Use provided output channel or create a new one
     let channel = outputChannel;
@@ -246,8 +282,8 @@ async function updateMCPServer(): Promise<void> {
 }
 
 async function configureGitHubCopilot(): Promise<void> {
-    // Get the path to the MCP configuration file
-    const mcpConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'mcp.json');
+    // Get the path to the MCP configuration file (cross-platform)
+    const mcpConfigPath = getMcpConfigPath();
 
     const serverConfig = {
         "d365bc-admin": {
@@ -268,6 +304,7 @@ async function configureGitHubCopilot(): Promise<void> {
                 console.log('Error parsing existing MCP config:', error);
                 // If file exists but is corrupted, create backup and start fresh
                 const backupPath = `${mcpConfigPath}.backup.${Date.now()}`;
+                ensureParentDirExists(backupPath);
                 fs.copyFileSync(mcpConfigPath, backupPath);
                 console.log(`Backed up corrupted file to: ${backupPath}`);
                 mcpConfig = { servers: {} };
@@ -295,7 +332,8 @@ async function configureGitHubCopilot(): Promise<void> {
         console.log('Final merged servers:', JSON.stringify(mcpConfig.servers, null, 2));
         console.log('Full MCP config to write:', JSON.stringify(mcpConfig, null, 2));
 
-        // Write the updated configuration to the file
+        // Ensure directory exists and write the updated configuration to the file
+        ensureParentDirExists(mcpConfigPath);
         fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
 
         // Verify the file was written correctly
@@ -319,11 +357,11 @@ async function configureGitHubCopilot(): Promise<void> {
 
         const message = `Automatic MCP configuration failed. Please manually create or update the file:
 
-${mcpConfigPath}
+    ${mcpConfigPath}
 
-Add this content to the file:
+    Add this content to the file:
 
-${configInstructions}`;
+    ${configInstructions}`;
 
         vscode.window.showWarningMessage('MCP Configuration Required', 'Copy Instructions').then(selection => {
             if (selection === 'Copy Instructions') {
@@ -351,8 +389,8 @@ ${configInstructions}`;
 }
 
 async function removeGitHubCopilotConfig(): Promise<void> {
-    // Get the path to the MCP configuration file
-    const mcpConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'mcp.json');
+    // Get the path to the MCP configuration file (cross-platform)
+    const mcpConfigPath = getMcpConfigPath();
 
     try {
         if (fs.existsSync(mcpConfigPath)) {
@@ -368,6 +406,7 @@ async function removeGitHubCopilotConfig(): Promise<void> {
                 console.log('Updated MCP config after removal:', JSON.stringify(mcpConfig, null, 2));
 
                 // Write the updated configuration back to the file
+                ensureParentDirExists(mcpConfigPath);
                 fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
 
                 vscode.window.showInformationMessage('MCP configuration removed from mcp.json file successfully!');
@@ -379,7 +418,7 @@ async function removeGitHubCopilotConfig(): Promise<void> {
         }
     } catch (error) {
         // If automatic removal fails, inform user to remove manually
-        const mcpConfigPathDisplay = path.join('~/Library/Application Support/Code/User/mcp.json');
+        const mcpConfigPathDisplay = humanizePath(getMcpConfigPath());
         vscode.window.showInformationMessage(
             `Please manually remove the "d365bc-admin" entry from the "servers" section in: ${mcpConfigPathDisplay}`
         );
@@ -397,7 +436,7 @@ async function isMCPServerInstalled(): Promise<boolean> {
 
 async function checkMCPConfiguration(): Promise<{ configured: boolean; command?: string }> {
     try {
-        const mcpConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'mcp.json');
+        const mcpConfigPath = getMcpConfigPath();
 
         if (!fs.existsSync(mcpConfigPath)) {
             return { configured: false };
