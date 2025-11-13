@@ -26,6 +26,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('d365bc-admin-mcp.install', installMCPServer),
         vscode.commands.registerCommand('d365bc-admin-mcp.uninstall', uninstallMCPServer),
+        vscode.commands.registerCommand('d365bc-admin-mcp.update', updateMCPServer),
         vscode.commands.registerCommand('d365bc-admin-mcp.checkStatus', checkStatus),
         vscode.commands.registerCommand('d365bc-admin-mcp.showDiagnostics', showDiagnostics)
     );
@@ -193,6 +194,54 @@ async function uninstallMCPServer(): Promise<void> {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         outputChannel.appendLine(`Uninstallation failed: ${errorMessage}`);
         vscode.window.showErrorMessage(`Uninstallation failed: ${errorMessage}`);
+    }
+}
+
+async function updateMCPServer(): Promise<void> {
+    const outputChannel = vscode.window.createOutputChannel('D365 BC Admin MCP Update');
+    outputChannel.show();
+
+    try {
+        outputChannel.appendLine('Starting D365 BC Admin MCP Server update...');
+
+        // Check prerequisites first
+        const prerequisitesMet = await checkPrerequisites(outputChannel);
+        if (!prerequisitesMet) {
+            return;
+        }
+
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: 'Updating D365 BC Admin MCP Server',
+            cancellable: false
+        }, async (progress) => {
+            progress.report({ increment: 0, message: 'Updating npm package...' });
+
+            try {
+                outputChannel.appendLine('Updating @demiliani/d365bc-admin-mcp globally...');
+                await execCommand('npm update -g @demiliani/d365bc-admin-mcp');
+                outputChannel.appendLine('✓ Package updated successfully');
+                progress.report({ increment: 60, message: 'Re-validating configuration...' });
+            } catch (error) {
+                throw new Error(`Failed to update npm package: ${error}`);
+            }
+
+            // Reconfigure MCP in case of changes
+            try {
+                await configureGitHubCopilot();
+                outputChannel.appendLine('✓ MCP configuration verified');
+                progress.report({ increment: 100, message: 'Update completed!' });
+            } catch (error) {
+                outputChannel.appendLine(`Warning: MCP configuration verification failed: ${error}`);
+            }
+        });
+
+        vscode.window.showInformationMessage('D365 BC Admin MCP Server updated successfully!');
+        updateStatusBar();
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        outputChannel.appendLine(`Update failed: ${errorMessage}`);
+        vscode.window.showErrorMessage(`Update failed: ${errorMessage}`);
     }
 }
 

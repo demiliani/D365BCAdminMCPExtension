@@ -3,7 +3,7 @@
   "displayName": "D365 BC Admin MCP Extension",
   "description": "Automatically install and configure the Dynamics 365 Business Central Admin MCP server for GitHub Copilot",
   "icon": "images/SD.png",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -11,7 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:d365bc-admin-mcp.update"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -31,6 +32,11 @@
       {
         "command": "d365bc-admin-mcp.showDiagnostics",
         "title": "D365BCAdmin - Show System Diagnostics"
+      }
+      ,
+      {
+        "command": "d365bc-admin-mcp.update",
+        "title": "D365BCAdmin - Update D365 BC Admin MCP Server to latest version"
       }
     ],
     "configuration": [
@@ -71,8 +77,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "npx tsc -p ./",
+    "watch": "npx tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
@@ -89,5 +95,13 @@
     "type": "git",
     "url": "https://github.com/demiliani/D365BCAdminMCPExtension"
   },
+  "keywords": [
+    "d365bc",
+    "msdyn365bc",
+    "business central",
+    "mcp",
+    "administration",
+    "dynamics 365"
+  ],
   "publisher": "stefanodemiliani"
 }
