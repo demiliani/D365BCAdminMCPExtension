@@ -147,3 +147,6 @@ For issues and questions:
 - Status bar integration
 - Comprehensive diagnostics
 - Quick start guide
+
+### 1.0.1
+- Added capability to delete a Business Central environment
