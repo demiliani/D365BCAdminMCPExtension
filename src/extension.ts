@@ -6,11 +6,122 @@ import * as os from 'os';
 
 let statusBarItem: vscode.StatusBarItem;
 
+// Installation state tracking to prevent concurrent operations
+let isInstallationInProgress = false;
+let installationLockTime: number | null = null;
+const INSTALLATION_LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes timeout for stale locks
+
 // Type definitions for MCP configuration
 interface MCPConfig {
     [key: string]: {
         command: string;
     };
+}
+
+/**
+ * Check if installation lock is valid (not stale)
+ */
+function isInstallationLockValid(): boolean {
+    if (!isInstallationInProgress) {
+        return false;
+    }
+    if (installationLockTime === null) {
+        return false;
+    }
+    // Check if lock has expired (stale)
+    const elapsed = Date.now() - installationLockTime;
+    if (elapsed > INSTALLATION_LOCK_TIMEOUT_MS) {
+        console.log('Installation lock expired (stale), releasing...');
+        releaseInstallationLock();
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Acquire installation lock to prevent concurrent operations
+ */
+function acquireInstallationLock(): boolean {
+    if (isInstallationLockValid()) {
+        console.log('Installation lock already held');
+        return false;
+    }
+    isInstallationInProgress = true;
+    installationLockTime = Date.now();
+    console.log('Installation lock acquired');
+    return true;
+}
+
+/**
+ * Release installation lock
+ */
+function releaseInstallationLock(): void {
+    isInstallationInProgress = false;
+    installationLockTime = null;
+    console.log('Installation lock released');
+}
+
+/**
+ * Check if MCP server process is currently running (Windows specific check for the exe)
+ */
+async function isMCPServerProcessRunning(): Promise<boolean> {
+    return new Promise((resolve) => {
+        if (process.platform === 'win32') {
+            // Check for D365BCAdminMCP.exe process on Windows
+            cp.exec('tasklist /FI "IMAGENAME eq D365BCAdminMCP.exe" /NH', { timeout: 10000 }, (error, stdout) => {
+                if (error) {
+                    console.log('Error checking for running MCP process:', error);
+                    resolve(false);
+                    return;
+                }
+                // If the process is running, stdout will contain the process name
+                const isRunning = stdout.toLowerCase().includes('d365bcadminmcp.exe');
+                console.log('MCP server process running check:', isRunning);
+                resolve(isRunning);
+            });
+        } else if (process.platform === 'darwin' || process.platform === 'linux') {
+            // Check for d365bc-admin-mcp process on macOS/Linux
+            cp.exec('pgrep -f "d365bc-admin-mcp|D365BCAdminMCP"', { timeout: 10000 }, (error, stdout) => {
+                // pgrep returns exit code 1 if no process found, which is not an error for us
+                const isRunning = !error && stdout.trim().length > 0;
+                console.log('MCP server process running check:', isRunning);
+                resolve(isRunning);
+            });
+        } else {
+            resolve(false);
+        }
+    });
+}
+
+/**
+ * Kill MCP server process if running
+ */
+async function killMCPServerProcess(): Promise<boolean> {
+    return new Promise((resolve) => {
+        if (process.platform === 'win32') {
+            cp.exec('taskkill /F /IM D365BCAdminMCP.exe', { timeout: 15000 }, (error) => {
+                if (error) {
+                    console.log('No MCP process to kill or error killing:', error.message);
+                    resolve(false);
+                    return;
+                }
+                console.log('MCP server process killed successfully');
+                resolve(true);
+            });
+        } else if (process.platform === 'darwin' || process.platform === 'linux') {
+            cp.exec('pkill -f "d365bc-admin-mcp|D365BCAdminMCP"', { timeout: 15000 }, (error) => {
+                if (error) {
+                    console.log('No MCP process to kill or error killing:', error.message);
+                    resolve(false);
+                    return;
+                }
+                console.log('MCP server process killed successfully');
+                resolve(true);
+            });
+        } else {
+            resolve(false);
+        }
+    });
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -31,15 +142,29 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('d365bc-admin-mcp.showDiagnostics', showDiagnostics)
     );
 
-    // Auto-install if enabled
+    // Auto-install if enabled (with debounce to prevent multiple triggers)
     const autoInstall = vscode.workspace.getConfiguration('d365bc-admin-mcp').get('autoInstall', true);
     if (autoInstall) {
-        checkPrerequisites().then(async (prerequisitesMet) => {
+        // Use a small delay to ensure VS Code is fully initialized and to debounce multiple activations
+        setTimeout(async () => {
+            // Check if another installation is already in progress
+            if (isInstallationLockValid()) {
+                console.log('Auto-install skipped: Installation already in progress');
+                return;
+            }
+
+            const prerequisitesMet = await checkPrerequisites();
             if (prerequisitesMet) {
                 const installed = await isMCPServerInstalled();
                 if (!installed) {
+                    // Double-check the lock before showing the dialog
+                    if (isInstallationLockValid()) {
+                        console.log('Auto-install skipped: Installation started elsewhere');
+                        return;
+                    }
+
                     vscode.window.showInformationMessage(
-                        'D365 BC Admin MCP Extension: Auto-installing MCP server...',
+                        'D365 BC Admin MCP Extension: MCP server not installed.',
                         'Install Now',
                         'Skip'
                     ).then(selection => {
@@ -49,7 +174,7 @@ export function activate(context: vscode.ExtensionContext) {
                     });
                 }
             }
-        });
+        }, 2000); // 2 second delay to debounce
     }
 }
 
@@ -140,12 +265,46 @@ async function installMCPServer(): Promise<void> {
     const outputChannel = vscode.window.createOutputChannel('D365 BC Admin MCP Installation');
     outputChannel.show();
 
+    // Check for concurrent installation
+    if (!acquireInstallationLock()) {
+        outputChannel.appendLine('⚠️ Installation already in progress. Please wait for it to complete.');
+        vscode.window.showWarningMessage('An installation is already in progress. Please wait for it to complete.');
+        return;
+    }
+
     try {
         outputChannel.appendLine('Starting D365 BC Admin MCP Server installation...');
+
+        // Check if MCP server process is running
+        outputChannel.appendLine('Checking for running MCP server processes...');
+        const isRunning = await isMCPServerProcessRunning();
+        if (isRunning) {
+            outputChannel.appendLine('⚠️ MCP server process is currently running.');
+            const selection = await vscode.window.showWarningMessage(
+                'MCP server is currently running. It needs to be stopped before installation. Stop it now?',
+                'Stop and Continue',
+                'Cancel'
+            );
+            
+            if (selection === 'Stop and Continue') {
+                outputChannel.appendLine('Stopping MCP server process...');
+                await killMCPServerProcess();
+                // Wait a bit for the process to fully terminate
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                outputChannel.appendLine('✓ MCP server process stopped');
+            } else {
+                outputChannel.appendLine('Installation cancelled by user.');
+                releaseInstallationLock();
+                return;
+            }
+        } else {
+            outputChannel.appendLine('✓ No running MCP server process detected');
+        }
 
         // Check prerequisites
         const prerequisitesMet = await checkPrerequisites(outputChannel);
         if (!prerequisitesMet) {
+            releaseInstallationLock();
             return;
         }
 
@@ -185,6 +344,8 @@ async function installMCPServer(): Promise<void> {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         outputChannel.appendLine(`Installation failed: ${errorMessage}`);
         vscode.window.showErrorMessage(`Installation failed: ${errorMessage}`);
+    } finally {
+        releaseInstallationLock();
     }
 }
 
@@ -192,8 +353,41 @@ async function uninstallMCPServer(): Promise<void> {
     const outputChannel = vscode.window.createOutputChannel('D365 BC Admin MCP Uninstallation');
     outputChannel.show();
 
+    // Check for concurrent operation
+    if (!acquireInstallationLock()) {
+        outputChannel.appendLine('⚠️ Another operation is already in progress. Please wait for it to complete.');
+        vscode.window.showWarningMessage('Another installation/update operation is already in progress. Please wait for it to complete.');
+        return;
+    }
+
     try {
         outputChannel.appendLine('Starting D365 BC Admin MCP Server uninstallation...');
+
+        // Check if MCP server process is running
+        outputChannel.appendLine('Checking for running MCP server processes...');
+        const isRunning = await isMCPServerProcessRunning();
+        if (isRunning) {
+            outputChannel.appendLine('⚠️ MCP server process is currently running.');
+            const selection = await vscode.window.showWarningMessage(
+                'MCP server is currently running. It needs to be stopped before uninstallation. Stop it now?',
+                'Stop and Continue',
+                'Cancel'
+            );
+            
+            if (selection === 'Stop and Continue') {
+                outputChannel.appendLine('Stopping MCP server process...');
+                await killMCPServerProcess();
+                // Wait a bit for the process to fully terminate
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                outputChannel.appendLine('✓ MCP server process stopped');
+            } else {
+                outputChannel.appendLine('Uninstallation cancelled by user.');
+                releaseInstallationLock();
+                return;
+            }
+        } else {
+            outputChannel.appendLine('✓ No running MCP server process detected');
+        }
 
         // Show progress
         await vscode.window.withProgress({
@@ -230,6 +424,8 @@ async function uninstallMCPServer(): Promise<void> {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         outputChannel.appendLine(`Uninstallation failed: ${errorMessage}`);
         vscode.window.showErrorMessage(`Uninstallation failed: ${errorMessage}`);
+    } finally {
+        releaseInstallationLock();
     }
 }
 
@@ -237,12 +433,46 @@ async function updateMCPServer(): Promise<void> {
     const outputChannel = vscode.window.createOutputChannel('D365 BC Admin MCP Update');
     outputChannel.show();
 
+    // Check for concurrent operation
+    if (!acquireInstallationLock()) {
+        outputChannel.appendLine('⚠️ Another operation is already in progress. Please wait for it to complete.');
+        vscode.window.showWarningMessage('Another installation/update operation is already in progress. Please wait for it to complete.');
+        return;
+    }
+
     try {
         outputChannel.appendLine('Starting D365 BC Admin MCP Server update...');
+
+        // Check if MCP server process is running
+        outputChannel.appendLine('Checking for running MCP server processes...');
+        const isRunning = await isMCPServerProcessRunning();
+        if (isRunning) {
+            outputChannel.appendLine('⚠️ MCP server process is currently running.');
+            const selection = await vscode.window.showWarningMessage(
+                'MCP server is currently running. It needs to be stopped before updating. Stop it now?',
+                'Stop and Continue',
+                'Cancel'
+            );
+            
+            if (selection === 'Stop and Continue') {
+                outputChannel.appendLine('Stopping MCP server process...');
+                await killMCPServerProcess();
+                // Wait a bit for the process to fully terminate
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                outputChannel.appendLine('✓ MCP server process stopped');
+            } else {
+                outputChannel.appendLine('Update cancelled by user.');
+                releaseInstallationLock();
+                return;
+            }
+        } else {
+            outputChannel.appendLine('✓ No running MCP server process detected');
+        }
 
         // Check prerequisites first
         const prerequisitesMet = await checkPrerequisites(outputChannel);
         if (!prerequisitesMet) {
+            releaseInstallationLock();
             return;
         }
 
@@ -278,6 +508,8 @@ async function updateMCPServer(): Promise<void> {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         outputChannel.appendLine(`Update failed: ${errorMessage}`);
         vscode.window.showErrorMessage(`Update failed: ${errorMessage}`);
+    } finally {
+        releaseInstallationLock();
     }
 }
 

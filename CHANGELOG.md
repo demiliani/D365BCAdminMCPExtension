@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2025-11-25
+
+### Fixed
+- Fixed EBUSY error when installing/updating while MCP server process is running
+- Added installation lock mechanism to prevent concurrent install/update operations
+- Added automatic detection and prompt to stop running MCP server processes before operations
+- Added debounce for auto-install to prevent multiple triggers during VS Code startup
+
+### Added
+- Process detection for running MCP server (Windows: D365BCAdminMCP.exe, macOS/Linux: d365bc-admin-mcp)
+- User confirmation dialog before stopping running MCP server processes
+- Installation lock timeout (5 minutes) to handle stale locks
+
 ## [1.0.0] - 2025-11-14
 
 ### Added
