@@ -659,10 +659,36 @@ async function removeGitHubCopilotConfig(): Promise<void> {
 
 async function isMCPServerInstalled(): Promise<boolean> {
     try {
-        await execCommand('d365bc-admin-mcp --version');
-        return true;
-    } catch {
+        // Get npm global bin directory
+        const npmBinPath = await execCommand('npm bin -g');
+        if (!npmBinPath) {
+            throw new Error('Could not get npm bin path');
+        }
+        const binDir = npmBinPath!.trim();
+
+        // Check for the executable file (cross-platform)
+        const executableName = process.platform === 'win32' ? 'd365bc-admin-mcp.cmd' : 'd365bc-admin-mcp';
+        const executablePath = path.join(binDir, executableName);
+
+        if (fs.existsSync(executablePath)) {
+            // Optionally verify it can run by checking version
+            try {
+                await execCommand(`"${executablePath}" --version`);
+                return true;
+            } catch {
+                // File exists but can't run, consider not installed
+                return false;
+            }
+        }
         return false;
+    } catch {
+        // Fallback to old method if npm bin fails
+        try {
+            await execCommand('d365bc-admin-mcp --version');
+            return true;
+        } catch {
+            return false;
+        }
     }
 }
 

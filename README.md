@@ -150,3 +150,7 @@ For issues and questions:
 
 ### 1.0.1
 - Added capability to delete a Business Central environment
+### 1.0.2
+- Improvements on process handling
+### 1.1.0
+- Full per-tenant extensions (PTE) management
