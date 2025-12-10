@@ -10,6 +10,7 @@ let statusBarItem: vscode.StatusBarItem;
 let isInstallationInProgress = false;
 let installationLockTime: number | null = null;
 const INSTALLATION_LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes timeout for stale locks
+const INSTANCE_MARKER_DIR = path.join(os.tmpdir(), 'd365bc-admin-mcp-instances');
 
 // Type definitions for MCP configuration
 interface MCPConfig {
@@ -127,6 +128,9 @@ async function killMCPServerProcess(): Promise<boolean> {
 export function activate(context: vscode.ExtensionContext) {
     console.log('D365 BC Admin MCP Extension is now active!');
 
+    // Track this VS Code window so we only clean up MCP processes when the last one closes
+    registerInstanceMarker();
+
     // Create status bar item
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     statusBarItem.command = 'd365bc-admin-mcp.checkStatus';
@@ -179,10 +183,26 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
+    console.log('D365 BC Admin MCP Extension deactivating...');
+    
+    // Clean up status bar
     if (statusBarItem) {
         statusBarItem.dispose();
     }
+
+    const shouldCleanup = unregisterInstanceMarker();
+    if (!shouldCleanup) {
+        console.log('Leaving MCP processes running because other VS Code windows remain');
+        return;
+    }
+    
+    // Kill D365BCAdminMCP processes synchronously to ensure they're killed before VS Code exits
+    killMCPServerProcessesSync();
 }
+
+
+
+
 
 function getVSCodeDirName(): string {
     const appName = vscode.env.appName || 'Visual Studio Code';
@@ -220,6 +240,126 @@ function humanizePath(p: string): string {
     return p;
 }
 
+function ensureInstanceMarkerDir(): void {
+    if (!fs.existsSync(INSTANCE_MARKER_DIR)) {
+        fs.mkdirSync(INSTANCE_MARKER_DIR, { recursive: true });
+    }
+}
+
+function isPidRunning(pid: number): boolean {
+    if (!Number.isFinite(pid) || pid <= 0) {
+        return false;
+    }
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error: any) {
+        // EPERM means the process exists but we cannot signal it
+        return error && error.code === 'EPERM';
+    }
+}
+
+function getActiveInstanceMarkerPids(): number[] {
+    ensureInstanceMarkerDir();
+    const entries = fs.readdirSync(INSTANCE_MARKER_DIR, { withFileTypes: true });
+    const activePids: number[] = [];
+
+    for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith('.lock')) {
+            continue;
+        }
+
+        const markerPath = path.join(INSTANCE_MARKER_DIR, entry.name);
+        const pid = parseInt(entry.name.replace('.lock', ''), 10);
+
+        if (isPidRunning(pid)) {
+            activePids.push(pid);
+            continue;
+        }
+
+        try {
+            fs.unlinkSync(markerPath);
+            console.log(`Removed stale VS Code instance marker for PID ${pid}`);
+        } catch (error: any) {
+            console.log('Failed to remove stale instance marker:', error?.message ?? error);
+        }
+    }
+
+    return activePids;
+}
+
+function registerInstanceMarker(): void {
+    try {
+        ensureInstanceMarkerDir();
+        // Clean stale markers before registering this one
+        getActiveInstanceMarkerPids();
+
+        const markerPath = path.join(INSTANCE_MARKER_DIR, `${process.pid}.lock`);
+        fs.writeFileSync(markerPath, Date.now().toString(), { encoding: 'utf8' });
+        console.log(`Registered VS Code instance marker at ${markerPath}`);
+    } catch (error: any) {
+        console.log('Failed to register VS Code instance marker:', error?.message ?? error);
+    }
+}
+
+function unregisterInstanceMarker(): boolean {
+    try {
+        ensureInstanceMarkerDir();
+        const markerPath = path.join(INSTANCE_MARKER_DIR, `${process.pid}.lock`);
+        if (fs.existsSync(markerPath)) {
+            fs.unlinkSync(markerPath);
+            console.log(`Removed VS Code instance marker at ${markerPath}`);
+        }
+    } catch (error: any) {
+        console.log('Failed to remove VS Code instance marker:', error?.message ?? error);
+    }
+
+    try {
+        const remaining = getActiveInstanceMarkerPids();
+        if (remaining.length === 0) {
+            console.log('No other VS Code instances registered; safe to clean up MCP processes');
+            return true;
+        }
+        console.log(`Skipping MCP cleanup: ${remaining.length} instance marker(s) still active (${remaining.join(', ')})`);
+        return false;
+    } catch (error: any) {
+        console.log('Error checking VS Code instance markers, proceeding with cleanup:', error?.message ?? error);
+        return true;
+    }
+}
+/**
+ * Kill D365BCAdminMCP processes synchronously (cleanup on extension deactivation)
+ * Uses synchronous execution to ensure processes are killed before VS Code exits
+ */
+function killMCPServerProcessesSync(): void {
+    console.log('Cleaning up D365BCAdminMCP processes (sync)...');
+    
+    try {
+        if (process.platform === 'win32') {
+            // Windows: taskkill to force close all D365BCAdminMCP.exe processes
+            cp.execSync('taskkill /F /IM D365BCAdminMCP.exe /T', { 
+                timeout: 5000, 
+                windowsHide: true,
+                stdio: 'ignore'  // Suppress output
+            });
+            console.log('D365BCAdminMCP processes cleaned up successfully');
+        } else if (process.platform === 'darwin' || process.platform === 'linux') {
+            // macOS/Linux: pkill to terminate d365bc-admin-mcp processes
+            cp.execSync('pkill -9 -f "d365bc-admin-mcp|D365BCAdminMCP"', { 
+                timeout: 5000,
+                stdio: 'ignore'
+            });
+            console.log('D365BCAdminMCP processes cleaned up successfully');
+        }
+    } catch (error: any) {
+        // Ignore "process not found" errors - that's fine
+        if (error.status === 128 || error.message?.includes('not found')) {
+            console.log('No D365BCAdminMCP processes to clean up');
+        } else {
+            console.log('Error cleaning up MCP processes:', error.message);
+        }
+    }
+}
 async function checkPrerequisites(outputChannel?: vscode.OutputChannel): Promise<boolean> {
     // Use provided output channel or create a new one
     let channel = outputChannel;
@@ -659,36 +799,56 @@ async function removeGitHubCopilotConfig(): Promise<void> {
 
 async function isMCPServerInstalled(): Promise<boolean> {
     try {
-        // Get npm global bin directory
-        const npmBinPath = await execCommand('npm bin -g');
-        if (!npmBinPath) {
-            throw new Error('Could not get npm bin path');
-        }
-        const binDir = npmBinPath!.trim();
-
-        // Check for the executable file (cross-platform)
-        const executableName = process.platform === 'win32' ? 'd365bc-admin-mcp.cmd' : 'd365bc-admin-mcp';
-        const executablePath = path.join(binDir, executableName);
-
-        if (fs.existsSync(executablePath)) {
-            // Optionally verify it can run by checking version
-            try {
-                await execCommand(`"${executablePath}" --version`);
+        // First check: look for npm package installation (most reliable)
+        try {
+            const listOutput = await execCommand('npm list -g @demiliani/d365bc-admin-mcp --depth=0');
+            if (listOutput && listOutput.includes('@demiliani/d365bc-admin-mcp')) {
+                console.log('MCP server package found via npm list');
                 return true;
-            } catch {
-                // File exists but can't run, consider not installed
-                return false;
             }
+        } catch (e) {
+            console.log('npm list check failed, trying alternative methods');
         }
-        return false;
-    } catch {
-        // Fallback to old method if npm bin fails
+
+        // Second check: Get npm global prefix and check for executable
+        try {
+            const npmPrefix = await execCommand('npm prefix -g');
+            if (npmPrefix) {
+                const prefixDir = npmPrefix.trim();
+                // On Windows, executables are in the prefix directory itself
+                // On Unix-like systems, they're in prefix/bin
+                const binDirs = process.platform === 'win32' 
+                    ? [prefixDir] 
+                    : [path.join(prefixDir, 'bin'), prefixDir];
+                
+                const executableName = process.platform === 'win32' ? 'd365bc-admin-mcp.cmd' : 'd365bc-admin-mcp';
+                
+                for (const binDir of binDirs) {
+                    const executablePath = path.join(binDir, executableName);
+                    if (fs.existsSync(executablePath)) {
+                        console.log('MCP server executable found at:', executablePath);
+                        return true;
+                    }
+                }
+            }
+        } catch (e) {
+            console.log('npm prefix check failed:', e);
+        }
+
+        // Third check: Try to run the command directly (last resort - may create processes)
         try {
             await execCommand('d365bc-admin-mcp --version');
+            console.log('MCP server command executed successfully');
             return true;
         } catch {
-            return false;
+            console.log('Direct command execution failed');
         }
+
+        console.log('MCP server not found by any detection method');
+        return false;
+    } catch (error) {
+        console.log('isMCPServerInstalled error:', error);
+        return false;
     }
 }
 
@@ -933,12 +1093,29 @@ function getQuickStartGuideHtml(): string {
 
 async function execCommand(command: string): Promise<string | null> {
     return new Promise((resolve, reject) => {
-        cp.exec(command, { timeout: 30000 }, (error, stdout, stderr) => {
+        const child = cp.exec(command, { timeout: 30000, windowsHide: true }, (error, stdout, stderr) => {
             if (error) {
                 reject(error);
                 return;
             }
             resolve(stdout || stderr);
         });
+        
+        // Ensure child process is properly terminated if parent exits
+        if (child.pid) {
+            const cleanup = () => {
+                try {
+                    if (!child.killed) {
+                        child.kill();
+                    }
+                } catch (e) {
+                    // Process may already be dead
+                }
+            };
+            
+            // Register cleanup handlers
+            child.on('exit', cleanup);
+            process.on('exit', cleanup);
+        }
     });
 }

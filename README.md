@@ -1,4 +1,4 @@
-# D365 BC Admin MCP Extension
+# YAMPI - D365 BC Admin MCP Extension
 
 A Visual Studio Code extension that automatically installs and configures the Dynamics 365 Business Central Admin MCP server for GitHub Copilot integration.
 

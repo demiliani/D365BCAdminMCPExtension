@@ -12,6 +12,10 @@ yarn-error.log*
 # Extension packages
 *.vsix
 
+# JS files
+*.js
+*.txt
+
 # Logs
 *.log
 logs/

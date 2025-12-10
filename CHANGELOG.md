@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.7] - 2025-12-11
+
+### Changed
+- Changed to synchronous process cleanup to ensure MCP processes are killed before VS Code exits
+- Prevents async cleanup from being interrupted when VS Code closes
+- Guarantees zombie process cleanup completes even during rapid shutdown
+- Enhanced MCP server detection using npm list check first to avoid unnecessary process spawning
+- Fixed false negative installation checks that caused repeated installation prompts
+
 ## [1.1.1] - 2025-12-10
 
 ### Added
