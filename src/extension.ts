@@ -588,22 +588,32 @@ async function updateMCPServer(): Promise<void> {
         const isRunning = await isMCPServerProcessRunning();
         if (isRunning) {
             outputChannel.appendLine('⚠️ MCP server process is currently running.');
-            const selection = await vscode.window.showWarningMessage(
-                'MCP server is currently running. It needs to be stopped before updating. Stop it now?',
-                'Stop and Continue',
-                'Cancel'
-            );
+            outputChannel.appendLine('Stopping all MCP server processes to prevent file locks...');
             
-            if (selection === 'Stop and Continue') {
-                outputChannel.appendLine('Stopping MCP server process...');
-                await killMCPServerProcess();
-                // Wait a bit for the process to fully terminate
+            try {
+                // Kill all MCP processes synchronously to ensure they're terminated before update
+                if (process.platform === 'win32') {
+                    cp.execSync('taskkill /F /IM D365BCAdminMCP.exe /T', { 
+                        timeout: 5000, 
+                        windowsHide: true,
+                        stdio: 'ignore'
+                    });
+                } else if (process.platform === 'darwin' || process.platform === 'linux') {
+                    cp.execSync('pkill -9 -f "d365bc-admin-mcp|D365BCAdminMCP"', { 
+                        timeout: 5000,
+                        stdio: 'ignore'
+                    });
+                }
+                
+                // Wait a bit for the process to fully terminate and release file locks
                 await new Promise(resolve => setTimeout(resolve, 2000));
-                outputChannel.appendLine('✓ MCP server process stopped');
-            } else {
-                outputChannel.appendLine('Update cancelled by user.');
-                releaseInstallationLock();
-                return;
+                outputChannel.appendLine('✓ All MCP server processes stopped');
+            } catch (error: any) {
+                // Ignore "process not found" errors
+                if (!error.status || error.status !== 128) {
+                    outputChannel.appendLine(`Warning stopping processes: ${error.message}`);
+                }
+                outputChannel.appendLine('✓ No running MCP server process detected or already stopped');
             }
         } else {
             outputChannel.appendLine('✓ No running MCP server process detected');
